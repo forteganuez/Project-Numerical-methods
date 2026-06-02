@@ -1,3 +1,5 @@
 numpy = 2.2.6
 matpltlib = 3.10.3
+pillow = 11.2.1
+# Intall ffmpeg on your system to reproduce  and get the the mp4 video
 
