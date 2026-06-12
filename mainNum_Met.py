@@ -16,15 +16,15 @@ os.makedirs("results/q11_nu5000", exist_ok=True)
 os.makedirs("results/island",     exist_ok=True)
 
 # --- Physical parameters (Table 1) ---
-Lx, Ly = 600*1e3, 240*1e3
-Nx, Ny = 256, 102
-g_prime = 0.3
-H0 = 1000.0
-U0 = 8.0
-R0 = 20*1e3
-Cd = 0.02
-nu = 1000.0
-dt = 30.0
+Lx, Ly = 600*1e3, 240*1e3 # Grid size 
+Nx, Ny = 256, 102         # Grid resolution
+g_prime = 0.3             # Reduced gravity
+H0 = 1000.0               # Mean layer depth
+U0 = 8.0                  # Inflow wind speed
+R0 = 20*1e3               # Island radius
+Cd = 0.02                 # Drag coeff
+nu = 1000.0               # Eddy viscosity
+dt = 30.0                 # Time step
 
 # --- Grid ---
 x = np.linspace(0, Lx, Nx)
@@ -35,9 +35,9 @@ X, Y = np.meshgrid(x, y)
 
 # --- Initial fields ---
 rng = np.random.default_rng(0)
-h = np.full((Ny, Nx), H0)
-u = np.full((Ny, Nx), U0) + 1e-3*U0 * rng.standard_normal((Ny, Nx))
-v = np.zeros((Ny, Nx))    + 1e-3*U0 * rng.standard_normal((Ny, Nx))
+h = np.full((Ny, Nx), H0)                                             # Surface height
+u = np.full((Ny, Nx), U0) + 1e-3*U0 * rng.standard_normal((Ny, Nx))   # East-West wind velocity
+v = np.zeros((Ny, Nx))    + 1e-3*U0 * rng.standard_normal((Ny, Nx))   # North-South wind velocity
 
 # --- Gaussian mask ---
 xc, yc = Lx/3, Ly/2
@@ -118,6 +118,7 @@ def rhs(h, u, v, C, g_prime, nu, Cd, dx, dy):
 
 @njit
 def rk2_step(h, u, v, C, g_prime, nu, Cd, dt, dx, dy):
+    """ Runge-Kutta 2 method"""
     dh1, du1, dv1 = rhs(h, u, v, C, g_prime, nu, Cd, dx, dy)
     h1 = h + dt * dh1
     u1 = u + dt * du1
@@ -131,6 +132,7 @@ def rk2_step(h, u, v, C, g_prime, nu, Cd, dt, dx, dy):
 
 @njit
 def rk4_step(h, u, v, C, g_prime, nu, Cd, dt, dx, dy):
+    """ Runge-Kutta 4 method. Used for satellite fitting section"""
     h1, u1, v1 = rhs(h, u, v, C, g_prime, nu, Cd, dx, dy)
     h2, u2, v2 = rhs(h+(dt/2)*h1, u+(dt/2)*u1, v+(dt/2)*v1, C, g_prime, nu, Cd, dx, dy)
     h3, u3, v3 = rhs(h+(dt/2)*h2, u+(dt/2)*u2, v+(dt/2)*v2, C, g_prime, nu, Cd, dx, dy)
@@ -143,7 +145,10 @@ def rk4_step(h, u, v, C, g_prime, nu, Cd, dt, dx, dy):
 
 @njit
 def boundary_conditions(h, u, v, U0, H0):
-    u[:, 0] = U0;  v[:, 0] = 0.0;  h[:, 0] = H0
+    
+    u[:, 0] = U0;  v[:, 0] = 0.0;  h[:, 0] = H0 # West conditions
+
+    # East conditions
     u[:, -1] = u[:, -2]
     v[:, -1] = v[:, -2]
     h[:, -1] = h[:, -2]
@@ -155,8 +160,8 @@ def boundary_conditions(h, u, v, U0, H0):
 # ----------------------------------------------------------------
 
 q_test = np.sin(2*np.pi*X / Lx)
-num    = ddx(q_test, dx)
-ana    = (2*np.pi / Lx) * np.cos(2*np.pi*X / Lx)
+num    = ddx(q_test, dx)                          # Numerical derivative ddx
+ana    = (2*np.pi / Lx) * np.cos(2*np.pi*X / Lx)  # Analytical derivative
 print("max relative error:", np.abs(num - ana).max() / (2*np.pi/Lx))
 
 
@@ -165,12 +170,13 @@ print("max relative error:", np.abs(num - ana).max() / (2*np.pi/Lx))
 # ----------------------------------------------------------------
 
 def update_rk2_anim(h, u, v, steps=60000):
+    """ Animation function for Runge-Kutta 2"""
     zeta_frames = []
     for n in range(steps):
         h, u, v = rk2_step(h, u, v, C, g_prime, nu, Cd, dt, dx, dy)
         h, u, v = boundary_conditions(h, u, v, U0, H0)
         if n % 100 == 0:
-            zeta_frames.append(ddx(v, dx) - ddy(u, dy))
+            zeta_frames.append(ddx(v, dx) - ddy(u, dy))  # Saving frames every 100 iterations
     return h, u, v, zeta_frames
 
 
@@ -272,7 +278,7 @@ def cross_stream_v_at_xy(h, u, v, nu_val, out_dir, Nsteps=20000, save_every=100)
     return t_cut, v_cut, freqs, power, f_dom, T_dom
 
 
-D = 2 * R0
+D = 2 * R0 # Diameter of island
 
 # --- nu = 1000 run ---
 h = np.full((Ny, Nx), H0)
@@ -306,18 +312,19 @@ print(f"WIth nu = 5000, Re = {8 * 20000/5000}")
 
 
 # ----------------------------------------------------------------
-# Cabo Verde island  (Q13 — RK4)
+# Cabo Verde island  (Part 4 — RK4)
 # ----------------------------------------------------------------
 
-vortex = mping.imread("vortex 3.jpg")
+vortex = mping.imread("vortex 3.jpg") # Importing image of Cabo vortex
 
-R0_cv = 20e3
-U0_cv = 4.0
-Cd_cv = 0.05
-xc_cv, yc_cv = 170e3, Ly/2
-C_cv = np.exp(-(((X - xc_cv)**2 + (Y - yc_cv)**2) / (0.35*R0_cv)**2))
+R0_cv = 20e3                 # Cabo island radius using NASA worldview (m)
+U0_cv = 4.0                  # Initial wind speed (ms^1)
+Cd_cv = 0.05                 # Drag coeff
+xc_cv, yc_cv = 170e3, Ly/2   # Center of island located on grid
+C_cv = np.exp(-(((X - xc_cv)**2 + (Y - yc_cv)**2) / (0.35*R0_cv)**2))  # Gaussian mask
 nu_cv = 1000.0
 
+# --- Initial fields ---
 rng = np.random.default_rng(0)
 h = np.full((Ny, Nx), H0)
 u = np.full((Ny, Nx), U0_cv) + 1e-3*U0_cv * rng.standard_normal((Ny, Nx))
@@ -325,6 +332,7 @@ v = np.zeros((Ny, Nx))       + 1e-3*U0_cv * rng.standard_normal((Ny, Nx))
 
 
 def update_rk4_anim_island(h, u, v, steps=60000):
+    """ Animation function that stores all frames in a single array """
     zeta_frames2 = []
     for n in range(steps):
         h, u, v = rk4_step(h, u, v, C_cv, g_prime, nu_cv, Cd_cv, dt, dx, dy)
